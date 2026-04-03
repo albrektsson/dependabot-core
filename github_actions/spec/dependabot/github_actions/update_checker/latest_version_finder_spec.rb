@@ -293,37 +293,37 @@ RSpec.describe namespace::LatestVersionFinder do
       context "with a release date more than 90 days ago" do
         let(:release_date) { "2023-11-03T10:00:00Z" }
 
-        it { is_expected.to eq(false) }
+        it { is_expected.to be(false) }
       end
 
       context "with a release date less than 90 days ago" do
         let(:release_date) { "2024-03-14T10:00:00Z" }
 
-        it { is_expected.to eq(true) }
+        it { is_expected.to be(true) }
       end
 
       context "with a release date exactly 90 days ago" do
         let(:release_date) { "2024-01-04T16:00:00Z" }
 
-        it { is_expected.to eq(false) }
+        it { is_expected.to be(false) }
       end
 
       context "with nil release_date" do
         let(:release_date) { nil }
 
-        it { is_expected.to eq(false) }
+        it { is_expected.to be(false) }
       end
 
       context "with empty release_date" do
         let(:release_date) { "" }
 
-        it { is_expected.to eq(false) }
+        it { is_expected.to be(false) }
       end
 
       context "with invalid date format" do
         let(:release_date) { "invalid-date" }
 
-        it { is_expected.to eq(false) }
+        it { is_expected.to be(false) }
       end
 
       context "without cooldown options" do
@@ -342,12 +342,12 @@ RSpec.describe namespace::LatestVersionFinder do
           )
         end
 
-        it { is_expected.to eq(false) }
+        it { is_expected.to be(false) }
       end
     end
 
     describe "#release_date_to_seconds" do
-      subject { finder.send(:release_date_to_seconds, release_date) }
+      subject(:seconds) { finder.send(:release_date_to_seconds, release_date) }
 
       context "with ISO 8601 date string" do
         let(:release_date) { "2024-04-03T16:00:00Z" }
@@ -355,7 +355,7 @@ RSpec.describe namespace::LatestVersionFinder do
         it { is_expected.to be_a(Integer) }
 
         it "converts date to Unix timestamp" do
-          expect(subject).to eq(Time.parse("2024-04-03T16:00:00Z").to_i)
+          expect(seconds).to eq(Time.parse("2024-04-03T16:00:00Z").to_i)
         end
       end
 
@@ -363,7 +363,7 @@ RSpec.describe namespace::LatestVersionFinder do
         let(:release_date) { "2024-01-15T10:30:00Z" }
 
         it "parses and converts correctly" do
-          expect(subject).to eq(Time.parse("2024-01-15T10:30:00Z").to_i)
+          expect(seconds).to eq(Time.parse("2024-01-15T10:30:00Z").to_i)
         end
       end
     end
@@ -402,6 +402,18 @@ RSpec.describe namespace::LatestVersionFinder do
       end
 
       context "when git fetch fails" do
+        let(:finder) do
+          described_class.new(
+            dependency: dependency,
+            dependency_files: [],
+            credentials: github_credentials,
+            security_advisories: security_advisories,
+            ignored_versions: ignored_versions,
+            raise_on_ignored: raise_on_ignored,
+            cooldown_options: Dependabot::Package::ReleaseCooldownOptions.new(default_days: 90)
+          )
+        end
+
         before do
           allow_any_instance_of(Dependabot::GithubActions::Package::PackageDetailsFetcher)
             .to receive(:fetch_tag_and_release_date).and_raise(StandardError, "git error")

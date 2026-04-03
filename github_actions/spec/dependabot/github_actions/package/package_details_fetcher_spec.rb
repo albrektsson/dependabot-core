@@ -265,12 +265,14 @@ RSpec.describe Dependabot::GithubActions::Package::PackageDetailsFetcher do
 
     it "includes tag and release_date attributes" do
       results = fetch_tag_and_release_date
-      results.each do |tag_detail|
-        expect(tag_detail).to have_attributes(
-          tag: an_instance_of(String),
-          release_date: [an_instance_of(String), nil]
+      expect(results).to(
+        all(
+          have_attributes(
+            tag: an_instance_of(String),
+            release_date: an_instance_of([String, NilClass])
+          )
         )
-      end
+      )
     end
 
     it "populates tags from allowed version tags" do
