@@ -175,7 +175,7 @@ module Dependabot
         def select_version_tags_in_cooldown_period
           version_tags_in_cooldown_period = T.let([], T::Array[String])
 
-          package_details_fetcher.fetch_tag_and_release_date.each do |git_tag_with_detail|
+          T.must(package_details_fetcher).fetch_tag_and_release_date.each do |git_tag_with_detail|
             if check_if_version_in_cooldown_period?(git_tag_with_detail.release_date)
               version_tags_in_cooldown_period << git_tag_with_detail.tag
             end
@@ -221,7 +221,7 @@ module Dependabot
           return false unless release_date&.length&.positive?
           return false unless cooldown_options
 
-          passed_seconds = Time.now.to_i - release_date_to_seconds(release_date)
+          passed_seconds = Time.now.to_i - release_date_to_seconds(T.must(release_date))
 
           Dependabot.logger.info(
             "Days since release : #{passed_seconds / (3600 * 24)} " \
