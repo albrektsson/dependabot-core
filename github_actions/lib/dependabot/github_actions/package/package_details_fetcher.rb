@@ -136,6 +136,8 @@ module Dependabot
 
           allowed_version_tags.each do |tag|
             release_date = fetch_release_date_for_tag(tag.name)
+            next if release_date.nil?
+
             result << Dependabot::GitTagWithDetail.new(
               tag: tag.name,
               release_date: release_date
