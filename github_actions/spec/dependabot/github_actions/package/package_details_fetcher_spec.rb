@@ -269,7 +269,7 @@ RSpec.describe Dependabot::GithubActions::Package::PackageDetailsFetcher do
         all(
           have_attributes(
             tag: an_instance_of(String),
-            release_date: an_instance_of([String, NilClass])
+            release_date: an_instance_of(String)
           )
         )
       )

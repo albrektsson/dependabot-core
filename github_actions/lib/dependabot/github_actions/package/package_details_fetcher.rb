@@ -144,10 +144,39 @@ module Dependabot
             )
           end
 
+          # Log an error if we couldn't fetch any release dates
+          if result.empty? && allowed_version_tags.any?
+            Dependabot.logger.error("Error fetching tag and release date: unable to fetch release dates for any allowed tags")
+          end
+
           result
         rescue StandardError => e
           Dependabot.logger.error("Error fetching tag and release date: #{e.message}")
           []
+        end
+
+        sig do
+          returns(T::Array[T::Hash[Symbol, T.untyped]])
+        end
+        def allowed_version_tags_with_release_dates
+          allowed_version_tags_hashes = git_commit_checker.local_tags_for_allowed_versions
+          tag_to_release_date = T.let({}, T::Hash[String, T.nilable(String)])
+
+          # Build a map of tag names to release dates for quick lookup
+          fetch_tag_and_release_date.each do |git_tag_with_detail|
+            tag_to_release_date[git_tag_with_detail.tag] = git_tag_with_detail.release_date
+          end
+
+          # Combine version info with release dates and sort by version descending
+          result = allowed_version_tags_hashes.map do |tag_hash|
+            tag_name = tag_hash.fetch(:tag)
+            tag_hash.merge(
+              release_date: tag_to_release_date[tag_name]
+            )
+          end
+
+          # Sort by version descending (newest first)
+          result.sort_by { |tag_hash| tag_hash.fetch(:version) }.reverse
         end
 
         private

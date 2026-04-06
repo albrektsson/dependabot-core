@@ -162,13 +162,22 @@ module Dependabot
           tags_in_cooldown = select_version_tags_in_cooldown_period
           return release if tags_in_cooldown.empty?
 
-          # Check if the current release tag is in cooldown
-          if tags_in_cooldown.include?(latest_version_tag&.fetch(:tag))
-            Dependabot.logger.info("Filtered out (cooldown) #{dependency.name}, #{release}")
-            return nil
+          # Walk through all allowed version tags in descending order (newest first)
+          # and return the first one NOT in cooldown
+          allowed_versions_with_dates = T.must(package_details_fetcher).allowed_version_tags_with_release_dates
+          allowed_versions_with_dates.each do |tag_info|
+            tag_name = tag_info.fetch(:tag)
+            next if tags_in_cooldown.include?(tag_name)
+
+            # Found a version not in cooldown, return it
+            version = tag_info.fetch(:version)
+            Dependabot.logger.info("Found acceptable version outside cooldown: #{version}")
+            return version
           end
 
-          release
+          # All versions are in cooldown, return nil to fallback to current version
+          Dependabot.logger.info("All versions are in cooldown period, returning current version")
+          nil
         end
 
         sig { returns(T::Array[String]) }
