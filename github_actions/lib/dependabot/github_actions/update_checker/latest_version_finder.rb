@@ -107,7 +107,7 @@ module Dependabot
 
         sig { returns(T.nilable(Dependabot::GithubActions::Package::PackageDetailsFetcher)) }
         def package_details_fetcher
-          @package_details_fetcher = T.let(
+          @package_details_fetcher ||= T.let(
             Dependabot::GithubActions::Package::PackageDetailsFetcher
                         .new(
                           dependency: dependency,

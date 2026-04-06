@@ -60,7 +60,8 @@ RSpec.describe namespace::LatestVersionFinder do
       credentials: github_credentials,
       security_advisories: security_advisories,
       ignored_versions: ignored_versions,
-      raise_on_ignored: raise_on_ignored
+      raise_on_ignored: raise_on_ignored,
+      cooldown_options: Dependabot::Package::ReleaseCooldownOptions.new(default_days: 90)
     )
   end
 
@@ -415,8 +416,9 @@ RSpec.describe namespace::LatestVersionFinder do
         end
 
         before do
-          allow_any_instance_of(Dependabot::GithubActions::Package::PackageDetailsFetcher)
-            .to receive(:fetch_tag_and_release_date).and_raise(StandardError, "git error")
+          mock_fetcher = instance_double(Dependabot::GithubActions::Package::PackageDetailsFetcher)
+          allow(mock_fetcher).to receive(:fetch_tag_and_release_date).and_raise(StandardError, "git error")
+          allow(finder).to receive(:package_details_fetcher).and_return(mock_fetcher)
         end
 
         it "handles error gracefully and returns empty array" do
