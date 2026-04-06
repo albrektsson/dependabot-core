@@ -508,7 +508,7 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
           allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
             .and_wrap_original do |method, cmd, **kwargs|
               # For any git show commands, return old date (outside cooldown)
-              if cmd =~ /git show/
+              if cmd.include?("git show")
                 "2022-08-01T00:00:00+00:00\n"
               else
                 method.call(cmd, **kwargs)
@@ -539,12 +539,11 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
           # Mock git operations to simulate latest commit being within cooldown
           allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
             .and_wrap_original do |method, cmd, **kwargs|
-              case cmd
-              # Latest commit in main is recent (within cooldown)
-              when /git show.*#{Regexp.escape(latest_commit_in_main)}/
+              if cmd.match?(/git show.*#{Regexp.escape(latest_commit_in_main)}/)
+                # Latest commit in main is recent (within cooldown)
                 "2022-09-05T00:00:00+00:00\n"
-              # Other git show commands return old date
-              when /git show/
+              elsif cmd.include?("git show")
+                # Other git show commands return old date
                 "2022-08-01T00:00:00+00:00\n"
               else
                 method.call(cmd, **kwargs)
@@ -576,7 +575,7 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
           allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
             .and_wrap_original do |method, cmd, **kwargs|
               # For any git show commands, return old date (outside cooldown)
-              if cmd =~ /git show/
+              if cmd.include?("git show")
                 "2022-08-01T00:00:00+00:00\n"
               else
                 method.call(cmd, **kwargs)
@@ -607,12 +606,11 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
           # Mock git operations to simulate latest commit in devel being within cooldown
           allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
             .and_wrap_original do |method, cmd, **kwargs|
-              case cmd
-              # Latest commit in devel is recent (within cooldown)
-              when /git show.*#{Regexp.escape(latest_commit_in_devel)}/
+              if cmd.match?(/git show.*#{Regexp.escape(latest_commit_in_devel)}/)
+                # Latest commit in devel is recent (within cooldown)
                 "2022-09-05T00:00:00+00:00\n"
-              # Other git show commands return old date
-              when /git show/
+              elsif cmd.include?("git show")
+                # Other git show commands return old date
                 "2022-08-01T00:00:00+00:00\n"
               else
                 method.call(cmd, **kwargs)

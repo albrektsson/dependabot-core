@@ -146,7 +146,7 @@ module Dependabot
 
           # Log an error if we couldn't fetch any release dates
           if result.empty? && allowed_version_tags.any?
-            Dependabot.logger.error("Error: unable to fetch release dates for any allowed tags")
+            Dependabot.logger.error("Error: unable to fetch tag and release dates for any allowed tags")
           end
 
           result
