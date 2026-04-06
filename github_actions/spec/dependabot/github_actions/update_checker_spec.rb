@@ -453,8 +453,8 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
               # v1.0.1 is old (before cooldown)
               when /git show.*v1\.0\.1/
                 "2019-01-01T00:00:00+00:00\n"
-              # v1.1.0 is recent (within cooldown)
-              when /git show.*v1\.1\.0/
+              # v1.1 or v1.1.0 is recent (within cooldown)
+              when /git show.*(v1\.1\.0|v1\.1)(?:\^|\s|$)/
                 "2019-07-20T00:00:00+00:00\n"
               else
                 # For any other git show commands, return an old date (outside cooldown)
