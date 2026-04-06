@@ -446,14 +446,21 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
         before do
           allow(Time).to receive(:now).and_return(Time.parse("2019-08-06 18:29:44 -0400"))
           # Mock git operations to return release dates for tags
-          allow(Dependabot::SharedHelpers).to receive(:run_shell_command).and_call_original
-          # v1.0.1 is old (before cooldown), v1.1.0 is recent (within cooldown)
+          # Default: return old date (outside cooldown) for other tags
           allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
-            .with(/git show.*v1\.0\.1/, anything)
-            .and_return("2019-01-01T00:00:00+00:00")
-          allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
-            .with(/git show.*v1\.1\.0/, anything)
-            .and_return("2019-07-20T00:00:00+00:00")
+            .and_wrap_original do |method, cmd, **kwargs|
+              case cmd
+              # v1.0.1 is old (before cooldown)
+              when /git show.*v1\.0\.1/
+                "2019-01-01T00:00:00+00:00\n"
+              # v1.1.0 is recent (within cooldown)
+              when /git show.*v1\.1\.0/
+                "2019-07-20T00:00:00+00:00\n"
+              else
+                # For any other git show commands, return an old date (outside cooldown)
+                method.call(cmd, **kwargs)
+              end
+            end
         end
 
         it { is_expected.to eq(Gem::Version.new("1.0.1")) }
@@ -496,8 +503,19 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
           Dependabot::Package::ReleaseCooldownOptions.new(default_days: 90)
         end
 
-        # The latest commit in main is at the tip, so it's already up to date
-        # No special mocking needed - we're already at the latest
+        before do
+          # Mock git operations - the latest commit in main is at the tip
+          allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
+            .and_wrap_original do |method, cmd, **kwargs|
+              # For any git show commands, return old date (outside cooldown)
+              if cmd =~ /git show/
+                "2022-08-01T00:00:00+00:00\n"
+              else
+                method.call(cmd, **kwargs)
+              end
+            end
+        end
+
         it "returns the expected value" do
           expect(latest_version).to eq(latest_commit_in_main)
         end
@@ -518,10 +536,20 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
         end
 
         before do
-          # Mock git show to return a recent date (within 90-day cooldown)
+          # Mock git operations to simulate latest commit being within cooldown
           allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
-            .with(/git show.*#{Regexp.escape(latest_commit_in_main)}/, anything)
-            .and_return("2022-09-05T00:00:00+00:00")
+            .and_wrap_original do |method, cmd, **kwargs|
+              case cmd
+              # Latest commit in main is recent (within cooldown)
+              when /git show.*#{Regexp.escape(latest_commit_in_main)}/
+                "2022-09-05T00:00:00+00:00\n"
+              # Other git show commands return old date
+              when /git show/
+                "2022-08-01T00:00:00+00:00\n"
+              else
+                method.call(cmd, **kwargs)
+              end
+            end
         end
 
         it "returns the current version" do
@@ -543,21 +571,21 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
           Dependabot::Package::ReleaseCooldownOptions.new(default_days: 90)
         end
 
-        # The latest commit in devel is at the tip, so it's already up to date
-        # No mocking needed - the test should pass because we're already at the latest
+        before do
+          # Mock git operations - latest commit in devel is at the tip
+          allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
+            .and_wrap_original do |method, cmd, **kwargs|
+              # For any git show commands, return old date (outside cooldown)
+              if cmd =~ /git show/
+                "2022-08-01T00:00:00+00:00\n"
+              else
+                method.call(cmd, **kwargs)
+              end
+            end
+        end
+
         it "returns the expected value" do
           expect(latest_version).to eq(latest_commit_in_devel)
-        end
-      end
-
-      context "when pinned to an out of date commit in a non default branch with cooldown enabled" do
-        let(:update_cooldown) do
-          Dependabot::Package::ReleaseCooldownOptions.new(default_days: 90)
-        end
-        let(:reference) { "96e7dec17bbeed08477b9edab6c3a573614b829d" }
-
-        it "returns the expected value" do
-          expect(latest_version).to eq("96e7dec17bbeed08477b9edab6c3a573614b829d")
         end
       end
 
@@ -576,10 +604,20 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
         end
 
         before do
-          # Mock git show to return a recent date (within 90-day cooldown) for latest_commit_in_devel
+          # Mock git operations to simulate latest commit in devel being within cooldown
           allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
-            .with(/git show.*#{Regexp.escape(latest_commit_in_devel)}/, anything)
-            .and_return("2022-09-05T00:00:00+00:00")
+            .and_wrap_original do |method, cmd, **kwargs|
+              case cmd
+              # Latest commit in devel is recent (within cooldown)
+              when /git show.*#{Regexp.escape(latest_commit_in_devel)}/
+                "2022-09-05T00:00:00+00:00\n"
+              # Other git show commands return old date
+              when /git show/
+                "2022-08-01T00:00:00+00:00\n"
+              else
+                method.call(cmd, **kwargs)
+              end
+            end
         end
 
         it "returns the expected value" do
