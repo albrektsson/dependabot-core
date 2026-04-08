@@ -267,14 +267,16 @@ RSpec.describe Dependabot::GithubActions::Package::PackageDetailsFetcher do
 
     before do
       # Stub git_commit_checker to return mock tags with release dates
-      allow_any_instance_of(Dependabot::GitCommitChecker).to receive(:refs_for_tag_with_detail)
-        .and_return(git_tag_with_details)
-      
+      mock_checker = instance_double(Dependabot::GitCommitChecker)
+
       # Also stub allowed_version_tags to include all our test tags
-      allow_any_instance_of(Dependabot::GitCommitChecker).to receive(:allowed_version_tags)
-        .and_return(
-          git_tag_with_details.map { |tag| double(name: tag.tag) }
-        )
+      allow(mock_checker).to receive_messages(
+        refs_for_tag_with_detail: git_tag_with_details,
+        allowed_version_tags: git_tag_with_details.map { |tag|
+          double(name: tag.tag)
+        }
+      )
+      allow(fetcher).to receive(:git_commit_checker).and_return(mock_checker)
     end
 
     it "returns array of GitTagWithDetail objects" do
@@ -308,8 +310,8 @@ RSpec.describe Dependabot::GithubActions::Package::PackageDetailsFetcher do
 
     it "preserves release dates for each tag" do
       results = fetch_tag_and_release_date
-      tag_date_map = results.each_with_object({}) { |item, hash| hash[item.tag] = item.release_date }
-      
+      tag_date_map = results.to_h { |item| [item.tag, item.release_date] }
+
       git_tag_with_details.each do |git_tag|
         expect(tag_date_map[git_tag.tag]).to eq(git_tag.release_date)
       end
@@ -317,8 +319,10 @@ RSpec.describe Dependabot::GithubActions::Package::PackageDetailsFetcher do
 
     context "when git_commit_checker.refs_for_tag_with_detail fails" do
       before do
-        allow_any_instance_of(Dependabot::GitCommitChecker).to receive(:refs_for_tag_with_detail)
+        mock_checker = instance_double(Dependabot::GitCommitChecker)
+        allow(mock_checker).to receive(:refs_for_tag_with_detail)
           .and_raise(StandardError, "git error")
+        allow(fetcher).to receive(:git_commit_checker).and_return(mock_checker)
       end
 
       it "handles error gracefully and returns empty array" do
@@ -333,10 +337,14 @@ RSpec.describe Dependabot::GithubActions::Package::PackageDetailsFetcher do
 
     context "when no tags match allowed versions" do
       before do
-        allow_any_instance_of(Dependabot::GitCommitChecker).to receive(:refs_for_tag_with_detail)
-          .and_return([
+        mock_checker = instance_double(Dependabot::GitCommitChecker)
+        allow(mock_checker).to receive_messages(
+          refs_for_tag_with_detail: [
             Dependabot::GitTagWithDetail.new(tag: "v999.0.0", release_date: "2099-01-01T00:00:00Z")
-          ])
+          ],
+          allowed_version_tags: [double(name: "v1.0.0")]
+        )
+        allow(fetcher).to receive(:git_commit_checker).and_return(mock_checker)
       end
 
       it "returns empty array when no tags match allowed versions" do

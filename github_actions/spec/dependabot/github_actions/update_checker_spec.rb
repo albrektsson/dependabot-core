@@ -463,18 +463,22 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
               end
             end
 
-          # Mock GitCommitChecker methods for the new cooldown_filter code path
-          allow_any_instance_of(Dependabot::GitCommitChecker).to receive(:refs_for_tag_with_detail)
-            .and_return([
-              Dependabot::GitTagWithDetail.new(tag: "v1.0.1", release_date: "2019-01-01T00:00:00+00:00"),
-              Dependabot::GitTagWithDetail.new(tag: "v1.1.0", release_date: "2019-07-20T00:00:00+00:00")
-            ])
+          # Mock GitCommitChecker to return tag data for cooldown_filter
+          allow(Dependabot::GitCommitChecker).to receive(:new).and_wrap_original do |method, **kwargs|
+            instance = method.call(**kwargs)
 
-          allow_any_instance_of(Dependabot::GitCommitChecker).to receive(:local_tags_for_allowed_versions)
-            .and_return([
-              { tag: "v1.0.1", version: Dependabot::GithubActions::Version.new("1.0.1") },
-              { tag: "v1.1.0", version: Dependabot::GithubActions::Version.new("1.1.0") }
-            ])
+            allow(instance).to receive_messages(
+              refs_for_tag_with_detail: [
+                Dependabot::GitTagWithDetail.new(tag: "v1.0.1", release_date: "2019-01-01T00:00:00+00:00"),
+                Dependabot::GitTagWithDetail.new(tag: "v1.1.0", release_date: "2019-07-20T00:00:00+00:00")
+              ],
+              local_tags_for_allowed_versions: [
+                { tag: "v1.0.1", version: Dependabot::GithubActions::Version.new("1.0.1") },
+                { tag: "v1.1.0", version: Dependabot::GithubActions::Version.new("1.1.0") }
+              ]
+            )
+            instance
+          end
         end
 
         it { is_expected.to eq(Gem::Version.new("1.0.1")) }
@@ -499,8 +503,6 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
 
       before do
         allow(Time).to receive(:now).and_return(Time.parse("2022-09-07 23:33:35 +0100"))
-        # Setup mock for git operations used by fetch_tag_and_release_date
-        allow(Dependabot::SharedHelpers).to receive(:run_shell_command).and_call_original
       end
 
       context "when pinned to an up to date commit in the default branch" do
@@ -518,16 +520,9 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
         end
 
         before do
-          # Mock git operations - the latest commit in main is at the tip
-          allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
-            .and_wrap_original do |method, cmd, **kwargs|
-              # For any git show commands, return old date (outside cooldown)
-              if cmd.include?("git show")
-                "2022-08-01T00:00:00+00:00\n"
-              else
-                method.call(cmd, **kwargs)
-              end
-            end
+          # Stub commit_metadata_details to return a date outside cooldown
+          finder = checker.send(:latest_version_finder)
+          allow(finder).to receive(:commit_metadata_details).and_return("2022-06-01T00:00:00+00:00")
         end
 
         it "returns the expected value" do
@@ -550,19 +545,9 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
         end
 
         before do
-          # Mock git operations to simulate latest commit being within cooldown
-          allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
-            .and_wrap_original do |method, cmd, **kwargs|
-              if cmd.match?(/git show.*#{Regexp.escape(latest_commit_in_main)}/)
-                # Latest commit in main is recent (within cooldown)
-                "2022-09-05T00:00:00+00:00\n"
-              elsif cmd.include?("git show")
-                # Other git show commands return old date
-                "2022-08-01T00:00:00+00:00\n"
-              else
-                method.call(cmd, **kwargs)
-              end
-            end
+          # Stub commit_metadata_details to return a recent date (within cooldown)
+          finder = checker.send(:latest_version_finder)
+          allow(finder).to receive(:commit_metadata_details).and_return("2022-09-05T00:00:00+00:00")
         end
 
         it "returns the current version" do
@@ -585,16 +570,9 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
         end
 
         before do
-          # Mock git operations - latest commit in devel is at the tip
-          allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
-            .and_wrap_original do |method, cmd, **kwargs|
-              # For any git show commands, return old date (outside cooldown)
-              if cmd.include?("git show")
-                "2022-08-01T00:00:00+00:00\n"
-              else
-                method.call(cmd, **kwargs)
-              end
-            end
+          # Stub commit_metadata_details to return a date outside cooldown
+          finder = checker.send(:latest_version_finder)
+          allow(finder).to receive(:commit_metadata_details).and_return("2022-06-01T00:00:00+00:00")
         end
 
         it "returns the expected value" do
@@ -617,19 +595,9 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
         end
 
         before do
-          # Mock git operations to simulate latest commit in devel being within cooldown
-          allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
-            .and_wrap_original do |method, cmd, **kwargs|
-              if cmd.match?(/git show.*#{Regexp.escape(latest_commit_in_devel)}/)
-                # Latest commit in devel is recent (within cooldown)
-                "2022-09-05T00:00:00+00:00\n"
-              elsif cmd.include?("git show")
-                # Other git show commands return old date
-                "2022-08-01T00:00:00+00:00\n"
-              else
-                method.call(cmd, **kwargs)
-              end
-            end
+          # Stub commit_metadata_details to return a recent date (within cooldown)
+          finder = checker.send(:latest_version_finder)
+          allow(finder).to receive(:commit_metadata_details).and_return("2022-09-05T00:00:00+00:00")
         end
 
         it "returns the expected value" do

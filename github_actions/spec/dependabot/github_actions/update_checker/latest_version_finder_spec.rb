@@ -389,15 +389,6 @@ RSpec.describe namespace::LatestVersionFinder do
         ]
       end
 
-      before do
-        allow(Time).to receive(:now).and_return(current_time)
-        
-        # Stub the package_details_fetcher to return our test data
-        mock_fetcher = instance_double(Dependabot::GithubActions::Package::PackageDetailsFetcher)
-        allow(mock_fetcher).to receive(:fetch_tag_and_release_date).and_return(git_tags_with_dates)
-        allow(finder).to receive(:package_details_fetcher).and_return(mock_fetcher)
-      end
-
       let(:finder) do
         described_class.new(
           dependency: dependency,
@@ -408,6 +399,15 @@ RSpec.describe namespace::LatestVersionFinder do
           raise_on_ignored: raise_on_ignored,
           cooldown_options: Dependabot::Package::ReleaseCooldownOptions.new(default_days: 90)
         )
+      end
+
+      before do
+        allow(Time).to receive(:now).and_return(current_time)
+
+        # Stub the package_details_fetcher to return our test data
+        mock_fetcher = instance_double(Dependabot::GithubActions::Package::PackageDetailsFetcher)
+        allow(mock_fetcher).to receive(:fetch_tag_and_release_date).and_return(git_tags_with_dates)
+        allow(finder).to receive(:package_details_fetcher).and_return(mock_fetcher)
       end
 
       context "with 90-day cooldown enabled" do

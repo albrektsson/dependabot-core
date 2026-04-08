@@ -197,8 +197,8 @@ module Dependabot
         def select_version_tags_in_cooldown_period(tags_with_dates = nil)
           tags_to_check = tags_with_dates || T.must(package_details_fetcher).fetch_tag_and_release_date
           tags_in_cooldown = tags_to_check
-            .select { |tag| check_if_version_in_cooldown_period?(tag.release_date) }
-            .map(&:tag)
+                             .select { |tag| check_if_version_in_cooldown_period?(tag.release_date) }
+                             .map(&:tag)
           tags_in_cooldown
         rescue StandardError => e
           Dependabot.logger.error("Error checking if version is in cooldown: #{e.message}")
@@ -207,7 +207,7 @@ module Dependabot
 
         sig { params(tags_with_dates: T::Array[Dependabot::GitTagWithDetail]).returns(T::Array[T::Hash[Symbol, T.untyped]]) }
         def build_allowed_versions_with_dates(tags_with_dates)
-          allowed_version_tags_hashes = T.must(git_helper).git_commit_checker.local_tags_for_allowed_versions
+          allowed_version_tags_hashes = @git_helper.git_commit_checker.local_tags_for_allowed_versions
           tag_to_release_date = T.let({}, T::Hash[String, T.nilable(String)])
 
           # Build a map of tag names to release dates for quick lookup
@@ -266,8 +266,8 @@ module Dependabot
           passed_seconds = Time.now.to_i - release_date_to_seconds(T.must(release_date))
 
           Dependabot.logger.info(
-            "Days since release : #{(Time.now.to_i - release_date.to_i) / (24 * 60 * 60)} " \
-            "(cooldown days #{days})"
+            "Days since release : #{passed_seconds / DAY_IN_SECONDS} " \
+            "(cooldown days #{T.must(cooldown_options).default_days})"
           )
 
           passed_seconds < T.must(cooldown_options).default_days * DAY_IN_SECONDS
