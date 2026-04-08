@@ -445,6 +445,7 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
 
         before do
           allow(Time).to receive(:now).and_return(Time.parse("2019-08-06 18:29:44 -0400"))
+
           # Mock git operations to return release dates for tags
           # Default: return old date (outside cooldown) for other tags
           allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
@@ -461,6 +462,19 @@ RSpec.describe Dependabot::GithubActions::UpdateChecker do
                 method.call(cmd, **kwargs)
               end
             end
+
+          # Mock GitCommitChecker methods for the new cooldown_filter code path
+          allow_any_instance_of(Dependabot::GitCommitChecker).to receive(:refs_for_tag_with_detail)
+            .and_return([
+              Dependabot::GitTagWithDetail.new(tag: "v1.0.1", release_date: "2019-01-01T00:00:00+00:00"),
+              Dependabot::GitTagWithDetail.new(tag: "v1.1.0", release_date: "2019-07-20T00:00:00+00:00")
+            ])
+
+          allow_any_instance_of(Dependabot::GitCommitChecker).to receive(:local_tags_for_allowed_versions)
+            .and_return([
+              { tag: "v1.0.1", version: Dependabot::GithubActions::Version.new("1.0.1") },
+              { tag: "v1.1.0", version: Dependabot::GithubActions::Version.new("1.1.0") }
+            ])
         end
 
         it { is_expected.to eq(Gem::Version.new("1.0.1")) }

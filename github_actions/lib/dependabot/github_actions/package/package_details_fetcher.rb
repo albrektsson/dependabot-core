@@ -132,16 +132,14 @@ module Dependabot
         sig { returns(T::Array[Dependabot::GitTagWithDetail]) }
         def fetch_tag_and_release_date
           allowed_version_tags = git_commit_checker.allowed_version_tags
-          result = T.let([], T::Array[Dependabot::GitTagWithDetail])
+          allowed_tag_names = Set.new(allowed_version_tags.map(&:name))
 
-          allowed_version_tags.each do |tag|
-            release_date = fetch_release_date_for_tag(tag.name)
-            next if release_date.nil?
+          # Use the shared GitCommitChecker#refs_for_tag_with_detail to fetch all tags
+          # with release dates in a single clone (instead of one clone per tag)
+          all_refs_with_detail = git_commit_checker.refs_for_tag_with_detail
 
-            result << Dependabot::GitTagWithDetail.new(
-              tag: tag.name,
-              release_date: release_date
-            )
+          result = all_refs_with_detail.select do |ref|
+            allowed_tag_names.include?(ref.tag)
           end
 
           # Log an error if we couldn't fetch any release dates
@@ -180,28 +178,6 @@ module Dependabot
         end
 
         private
-
-        sig { params(tag_name: String).returns(T.nilable(String)) }
-        def fetch_release_date_for_tag(tag_name)
-          url = git_commit_checker.dependency_source_details&.fetch(:url)
-          source = T.must(Source.from_url(url))
-
-          SharedHelpers.in_a_temporary_directory(File.dirname(source.repo)) do |temp_dir|
-            repo_contents_path = File.join(temp_dir, File.basename(source.repo))
-
-            SharedHelpers.run_shell_command("git clone --bare --no-recurse-submodules #{url} #{repo_contents_path}")
-            Dir.chdir(repo_contents_path) do
-              date = SharedHelpers.run_shell_command(
-                "git show --no-patch --format=\"%cd\" --date=iso #{tag_name}",
-                fingerprint: "git show --no-patch --format=\"%cd\" --date=iso <tag>"
-              )
-              return date.strip
-            end
-          end
-        rescue StandardError => e
-          Dependabot.logger.debug("Error fetching release date for tag #{tag_name}: #{e.message}")
-          nil
-        end
 
         sig { returns(Dependabot::GitCommitChecker) }
         def git_commit_checker

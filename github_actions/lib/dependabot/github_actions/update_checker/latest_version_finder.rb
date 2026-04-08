@@ -159,12 +159,24 @@ module Dependabot
 
           Dependabot.logger.info("Initializing cooldown filter")
 
-          tags_in_cooldown = select_version_tags_in_cooldown_period
+          # If the proposed release is a commit SHA (String), check its date against cooldown
+          if release.is_a?(String)
+            Dependabot.logger.info("Checking cooldown for commit SHA: #{release}")
+            return release unless check_if_version_in_cooldown_period?(commit_metadata_details)
+
+            # Proposed SHA is in cooldown; for a SHA-based proposal, return nil (don't fall back to tags)
+            Dependabot.logger.info("Proposed commit SHA is in cooldown, returning nil")
+            return nil
+          end
+
+          # For version tag proposals, fetch all tag data once (single clone)
+          all_tags_with_dates = T.must(package_details_fetcher).fetch_tag_and_release_date
+          tags_in_cooldown = Set.new(select_version_tags_in_cooldown_period(all_tags_with_dates))
           return release if tags_in_cooldown.empty?
 
           # Walk through all allowed version tags in descending order (newest first)
           # and return the first one NOT in cooldown
-          allowed_versions_with_dates = T.must(package_details_fetcher).allowed_version_tags_with_release_dates
+          allowed_versions_with_dates = build_allowed_versions_with_dates(all_tags_with_dates)
           allowed_versions_with_dates.each do |tag_info|
             tag_name = tag_info.fetch(:tag)
             next if tags_in_cooldown.include?(tag_name)
@@ -180,19 +192,38 @@ module Dependabot
           nil
         end
 
-        sig { returns(T::Array[String]) }
-        def select_version_tags_in_cooldown_period
-          version_tags_in_cooldown_period = T.let([], T::Array[String])
-
-          T.must(package_details_fetcher).fetch_tag_and_release_date.each do |git_tag_with_detail|
-            if check_if_version_in_cooldown_period?(git_tag_with_detail.release_date)
-              version_tags_in_cooldown_period << git_tag_with_detail.tag
-            end
-          end
-          version_tags_in_cooldown_period
+        sig { params(tags_with_dates: T.nilable(T::Array[Dependabot::GitTagWithDetail])).returns(T::Array[String]) }
+        def select_version_tags_in_cooldown_period(tags_with_dates = nil)
+          tags_to_check = tags_with_dates || T.must(package_details_fetcher).fetch_tag_and_release_date
+          tags_in_cooldown = tags_to_check
+            .select { |tag| check_if_version_in_cooldown_period?(tag.release_date) }
+            .map(&:tag)
+          tags_in_cooldown
         rescue StandardError => e
           Dependabot.logger.error("Error checking if version is in cooldown: #{e.message}")
           []
+        end
+
+        sig { params(tags_with_dates: T::Array[Dependabot::GitTagWithDetail]).returns(T::Array[T::Hash[Symbol, T.untyped]]) }
+        def build_allowed_versions_with_dates(tags_with_dates)
+          allowed_version_tags_hashes = T.must(git_helper).git_commit_checker.local_tags_for_allowed_versions
+          tag_to_release_date = T.let({}, T::Hash[String, T.nilable(String)])
+
+          # Build a map of tag names to release dates for quick lookup
+          tags_with_dates.each do |git_tag_with_detail|
+            tag_to_release_date[git_tag_with_detail.tag] = git_tag_with_detail.release_date
+          end
+
+          # Combine version info with release dates and sort by version descending
+          result = allowed_version_tags_hashes.map do |tag_hash|
+            tag_name = tag_hash.fetch(:tag)
+            tag_hash.merge(
+              release_date: tag_to_release_date[tag_name]
+            )
+          end
+
+          # Sort by version descending (newest first)
+          result.sort_by { |tag_hash| tag_hash.fetch(:version) }.reverse
         end
 
         sig { returns(T.nilable(String)) }
@@ -229,6 +260,7 @@ module Dependabot
         def check_if_version_in_cooldown_period?(release_date)
           return false unless release_date&.length&.positive?
           return false unless cooldown_options
+          return false unless T.must(cooldown_options).included?(dependency.name)
 
           passed_seconds = Time.now.to_i - release_date_to_seconds(T.must(release_date))
 

@@ -257,13 +257,32 @@ RSpec.describe Dependabot::GithubActions::Package::PackageDetailsFetcher do
     subject(:fetch_tag_and_release_date) { fetcher.fetch_tag_and_release_date }
 
     let(:upload_pack_fixture) { "setup-node" }
+    let(:git_tag_with_details) do
+      [
+        Dependabot::GitTagWithDetail.new(tag: "v1.0.0", release_date: "2024-01-01T00:00:00Z"),
+        Dependabot::GitTagWithDetail.new(tag: "v2.0.0", release_date: "2024-02-01T00:00:00Z"),
+        Dependabot::GitTagWithDetail.new(tag: "v3.0.0", release_date: "2024-03-01T00:00:00Z")
+      ]
+    end
+
+    before do
+      # Stub git_commit_checker to return mock tags with release dates
+      allow_any_instance_of(Dependabot::GitCommitChecker).to receive(:refs_for_tag_with_detail)
+        .and_return(git_tag_with_details)
+      
+      # Also stub allowed_version_tags to include all our test tags
+      allow_any_instance_of(Dependabot::GitCommitChecker).to receive(:allowed_version_tags)
+        .and_return(
+          git_tag_with_details.map { |tag| double(name: tag.tag) }
+        )
+    end
 
     it "returns array of GitTagWithDetail objects" do
       expect(fetch_tag_and_release_date).to be_an(Array)
       expect(fetch_tag_and_release_date.first).to be_a(Dependabot::GitTagWithDetail)
     end
 
-    it "includes tag and release_date attributes" do
+    it "includes tag and release_date attributes with correct values" do
       results = fetch_tag_and_release_date
       expect(results).to(
         all(
@@ -273,16 +292,33 @@ RSpec.describe Dependabot::GithubActions::Package::PackageDetailsFetcher do
           )
         )
       )
+      # Assert specific tag values
+      tags = results.map(&:tag).sort
+      expect(tags).to include("v1.0.0", "v2.0.0", "v3.0.0")
     end
 
-    it "populates tags from allowed version tags" do
+    it "filters to only allowed version tags" do
       results = fetch_tag_and_release_date
       expect(results.map(&:tag)).not_to be_empty
+      # All returned tags should be in the git_tag_with_details
+      expected_tags = git_tag_with_details.map(&:tag)
+      actual_tags = results.map(&:tag)
+      expect(actual_tags).to match_array(expected_tags)
     end
 
-    context "when git fetch fails" do
+    it "preserves release dates for each tag" do
+      results = fetch_tag_and_release_date
+      tag_date_map = results.each_with_object({}) { |item, hash| hash[item.tag] = item.release_date }
+      
+      git_tag_with_details.each do |git_tag|
+        expect(tag_date_map[git_tag.tag]).to eq(git_tag.release_date)
+      end
+    end
+
+    context "when git_commit_checker.refs_for_tag_with_detail fails" do
       before do
-        allow(Dependabot::SharedHelpers).to receive(:run_shell_command).and_raise(StandardError, "git error")
+        allow_any_instance_of(Dependabot::GitCommitChecker).to receive(:refs_for_tag_with_detail)
+          .and_raise(StandardError, "git error")
       end
 
       it "handles error gracefully and returns empty array" do
@@ -291,6 +327,25 @@ RSpec.describe Dependabot::GithubActions::Package::PackageDetailsFetcher do
 
       it "logs the error" do
         expect(Dependabot.logger).to receive(:error).with(/Error fetching tag and release date/)
+        fetch_tag_and_release_date
+      end
+    end
+
+    context "when no tags match allowed versions" do
+      before do
+        allow_any_instance_of(Dependabot::GitCommitChecker).to receive(:refs_for_tag_with_detail)
+          .and_return([
+            Dependabot::GitTagWithDetail.new(tag: "v999.0.0", release_date: "2099-01-01T00:00:00Z")
+          ])
+      end
+
+      it "returns empty array when no tags match allowed versions" do
+        expect(fetch_tag_and_release_date).to eq([])
+      end
+
+      it "logs error when no release dates found for allowed tags" do
+        expect(Dependabot.logger).to receive(:error)
+          .with(/Error fetching tag and release date: unable to fetch for allowed tags/)
         fetch_tag_and_release_date
       end
     end
