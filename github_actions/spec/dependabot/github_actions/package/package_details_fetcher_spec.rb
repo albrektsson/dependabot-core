@@ -320,6 +320,7 @@ RSpec.describe Dependabot::GithubActions::Package::PackageDetailsFetcher do
     context "when git_commit_checker.refs_for_tag_with_detail fails" do
       before do
         mock_checker = instance_double(Dependabot::GitCommitChecker)
+        allow(mock_checker).to receive(:allowed_version_tags).and_return([double(name: "v1.0.0")])
         allow(mock_checker).to receive(:refs_for_tag_with_detail)
           .and_raise(StandardError, "git error")
         allow(fetcher).to receive(:git_commit_checker).and_return(mock_checker)
